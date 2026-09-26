@@ -1,0 +1,9 @@
+.git
+.build
+output
+Dockerfile
+build.sh
+plan.md
+README.md
+*.tar.gz
+*.tar.xz

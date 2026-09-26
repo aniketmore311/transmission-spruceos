@@ -1,0 +1,11 @@
+{
+  "label": "Transmission",
+  "icon": "icon.png",
+  "launch": "launch.sh",
+  "description": "Torrent client with web UI",
+  "devices": [
+    "TRIMUI_SMART_PRO_S",
+    "TRIMUI_SMART_PRO"
+  ],
+  "hideInSimpleMode": false
+}

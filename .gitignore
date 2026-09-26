@@ -1,0 +1,32 @@
+# Build outputs
+output/
+.build/
+
+# Python
+__pycache__/
+*.pyc
+
+# Generated app artifacts (produced by build-app.sh)
+Transmission/transmission-daemon
+Transmission/web/
+Transmission/icon.png
+
+# Runtime files created on the device
+Transmission/settings.json
+Transmission/transmission.log
+Transmission/transmission.log.1
+Transmission/transmission.pid
+Transmission/.menu.json
+Transmission/queue.json
+Transmission/bandwidth-groups.json
+Transmission/stats.json
+Transmission/resume/
+Transmission/torrents/
+Transmission/blocklists/
+Transmission/blocklist-updates/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*~
