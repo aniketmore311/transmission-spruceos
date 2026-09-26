@@ -7,8 +7,8 @@
 #
 # Run ./build.sh first (or whenever the daemon is rebuilt), then this script.
 # It is idempotent and only copies generated files; the app's own sources
-# (config.json, launch.sh, lib/, settings.json.default, README.md) are authored
-# in Transmission/ directly.
+# (config.json, launch.sh, lib/, settings.json.default, README.md, icon.png) are
+# authored in Transmission/ directly.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -18,7 +18,6 @@ APPDIR="${ROOT}/Transmission"
 
 BIN_SRC="${OUT}/transmission-daemon"
 WEB_SRC="${OUT}/web"
-ICON_SRC="${OUT}/web/images/apple-touch-icon.png"
 
 if [ ! -f "${BIN_SRC}" ]; then
     echo "ERROR: ${BIN_SRC} not found. Run ./build.sh first." >&2
@@ -41,11 +40,9 @@ rm -rf "${APPDIR}/web"
 mkdir -p "${APPDIR}/web"
 cp -a "${WEB_SRC}/." "${APPDIR}/web/"
 
-# Placeholder icon for now (reuses the official web touch icon).
-if [ -f "${ICON_SRC}" ]; then
-    echo "[app] placing placeholder icon.png"
-    cp -f "${ICON_SRC}" "${APPDIR}/icon.png"
-fi
+# The app icon (Transmission/icon.png) is a committed source file, so it is
+# intentionally left untouched here. Regenerate it from
+# assets/transmission-icon.svg if needed.
 
 chmod +x "${APPDIR}/transmission-daemon" \
          "${APPDIR}/launch.sh" \

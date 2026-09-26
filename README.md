@@ -116,8 +116,10 @@ Dockerfile               # cross-build environment
 versions.env             # pinned versions + SHA-256 checksums
 cmake/                   # CMake cross toolchain file
 scripts/                 # toolchain / deps / transmission / collect steps
+assets/                  # app icon (SVG source)
 Transmission/            # the SpruceOS app (source)
   config.json            #   app manifest
+  icon.png               #   app icon
   launch.sh              #   entry point
   lib/                   #   shell + Python helpers
   settings.json.default  #   default Transmission config

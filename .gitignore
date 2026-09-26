@@ -9,7 +9,6 @@ __pycache__/
 # Generated app artifacts (produced by build-app.sh)
 Transmission/transmission-daemon
 Transmission/web/
-Transmission/icon.png
 
 # Runtime files created on the device
 Transmission/settings.json
