@@ -6,8 +6,10 @@
 # if the web-UI password was changed the request 401s and is logged.
 
 RPC_ENDPOINT="http://127.0.0.1:9091/transmission/rpc"
+RPC_RESP="/tmp/transmission-rpc.json"
 RPC_USER=""
 RPC_PASS=""
+RPC_ERR=""
 
 RPC_TORRENT_FIELDS='["id","name","status","percentDone","rateDownload","rateUpload","peersConnected","peersSendingToUs","peersGettingFromUs","eta","totalSize","leftUntilDone","downloadedEver","uploadedEver","uploadRatio","error","errorString","trackerStats","isFinished","isStalled"]'
 
@@ -25,9 +27,44 @@ write_status_error() {
     printf '{"error":"%s","torrents":[],"stats":{}}' "$msg" > "$STATUS_JSON"
 }
 
+# Low-level RPC call. Response is written to $RPC_RESP; on failure RPC_ERR holds
+# a human-readable reason and the function returns non-zero.
+rpc_simple() {
+    body="$1"
+    RPC_ERR=""
+    : > "$RPC_RESP"
+
+    if ! read_rpc_creds; then
+        RPC_ERR="No RPC credentials configured"
+        return 1
+    fi
+
+    headers="$(curl -s -D - -o /dev/null -u "$RPC_USER:$RPC_PASS" --max-time 5 "$RPC_ENDPOINT" 2>/dev/null)"
+    if [ -z "$headers" ]; then
+        RPC_ERR="Cannot reach the daemon"
+        return 1
+    fi
+
+    sid="$(printf '%s\n' "$headers" | awk 'tolower($1) == "x-transmission-session-id:" { print $2 }' | tr -d '\r' | head -n1)"
+    if [ -z "$sid" ]; then
+        code="$(printf '%s\n' "$headers" | head -n1 | awk '{ print $2 }')"
+        if [ "$code" = "401" ]; then
+            RPC_ERR="Authentication failed (check settings.json.default)"
+        else
+            RPC_ERR="RPC handshake failed"
+        fi
+        return 1
+    fi
+
+    curl -s -u "$RPC_USER:$RPC_PASS" -H "X-Transmission-Session-Id: $sid" --max-time 8 \
+        --data "$body" -o "$RPC_RESP" "$RPC_ENDPOINT" 2>/dev/null
+    return 0
+}
+
 # Fetch torrent list + session stats into $STATUS_JSON.
-# Returns 0 on success; on any failure $STATUS_JSON holds an "error" message.
+# Pass "quiet" to suppress the success log line (used by the main-menu summary).
 fetch_status() {
+    quiet="${1:-}"
     [ -n "${STATUS_JSON:-}" ] || return 1
 
     if ! daemon_is_running; then
@@ -35,47 +72,24 @@ fetch_status() {
         return 1
     fi
 
-    if ! read_rpc_creds; then
-        app_log "rpc: no credentials found in settings.json.default"
-        write_status_error "No RPC credentials configured"
+    if ! rpc_simple "{\"method\":\"torrent-get\",\"arguments\":{\"fields\":$RPC_TORRENT_FIELDS}}"; then
+        app_log "rpc: torrent-get failed: ${RPC_ERR:-unknown}"
+        write_status_error "$RPC_ERR"
         return 1
     fi
 
-    # Session-id handshake (Transmission requires it for CSRF protection).
-    headers="$(curl -s -D - -o /dev/null -u "$RPC_USER:$RPC_PASS" --max-time 5 "$RPC_ENDPOINT" 2>/dev/null)"
-    if [ -z "$headers" ]; then
-        app_log "rpc: no response from $RPC_ENDPOINT"
-        write_status_error "Cannot reach the daemon"
-        return 1
-    fi
-
-    sid="$(printf '%s\n' "$headers" | awk 'tolower($1) == "x-transmission-session-id:" { print $2 }' | tr -d '\r' | head -n1)"
-    code="$(printf '%s\n' "$headers" | head -n1 | awk '{ print $2 }')"
-
-    if [ -z "$sid" ]; then
-        if [ "$code" = "401" ]; then
-            app_log "rpc: authentication failed (HTTP 401) for user '$RPC_USER'"
-            write_status_error "Authentication failed (check settings.json.default)"
-        else
-            app_log "rpc: handshake failed (HTTP ${code:-unknown})"
-            write_status_error "RPC handshake failed"
-        fi
-        return 1
-    fi
-
-    torrents="$(curl -s -u "$RPC_USER:$RPC_PASS" -H "X-Transmission-Session-Id: $sid" --max-time 8 \
-        --data "{\"method\":\"torrent-get\",\"arguments\":{\"fields\":$RPC_TORRENT_FIELDS}}" \
-        "$RPC_ENDPOINT" 2>/dev/null)"
-    stats="$(curl -s -u "$RPC_USER:$RPC_PASS" -H "X-Transmission-Session-Id: $sid" --max-time 8 \
-        --data '{"method":"session-stats"}' "$RPC_ENDPOINT" 2>/dev/null)"
-
+    torrents="$(cat "$RPC_RESP")"
     if ! printf '%s' "$torrents" | jq -e '.arguments.torrents' >/dev/null 2>&1; then
         app_log "rpc: invalid torrent-get response"
         write_status_error "Bad response from daemon"
         return 1
     fi
 
-    [ -n "$stats" ] || stats='{}'
+    if rpc_simple '{"method":"session-stats"}'; then
+        stats="$(cat "$RPC_RESP")"
+    else
+        stats='{}'
+    fi
 
     if ! jq -n --argjson t "$torrents" --argjson s "$stats" \
         '{ error: "", torrents: ($t.arguments.torrents // []), stats: ($s.arguments // {}) }' \
@@ -85,6 +99,28 @@ fetch_status() {
         return 1
     fi
 
-    app_log "rpc: status fetched ($(jq '.torrents | length' "$STATUS_JSON" 2>/dev/null) torrent(s))"
+    if [ "$quiet" != "quiet" ]; then
+        app_log "rpc: status fetched ($(jq '.torrents | length' "$STATUS_JSON" 2>/dev/null) torrent(s))"
+    fi
     return 0
+}
+
+# Perform a per-torrent action. $1 = method, $2 = id, $3 = optional extra args.
+torrent_action() {
+    method="$1"
+    tid="$2"
+    extra="$3"
+
+    if [ -n "$extra" ]; then
+        body="{\"method\":\"$method\",\"arguments\":{\"ids\":[$tid],$extra}}"
+    else
+        body="{\"method\":\"$method\",\"arguments\":{\"ids\":[$tid]}}"
+    fi
+
+    if rpc_simple "$body" && jq -e '.result == "success"' "$RPC_RESP" >/dev/null 2>&1; then
+        app_log "rpc: $method id=$tid ok"
+        return 0
+    fi
+    app_log "rpc: $method id=$tid FAILED: ${RPC_ERR:-unknown}"
+    return 1
 }

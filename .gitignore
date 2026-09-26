@@ -18,6 +18,7 @@ Transmission/transmission-app.log
 Transmission/transmission-app.log.1
 Transmission/transmission.pid
 Transmission/.menu.json
+Transmission/.qr.png
 Transmission/queue.json
 Transmission/bandwidth-groups.json
 Transmission/stats.json

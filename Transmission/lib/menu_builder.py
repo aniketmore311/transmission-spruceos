@@ -2,9 +2,10 @@
 """Build PyUI OPTION_LIST menu JSON for the Transmission app.
 
 Usage:
-    menu_builder.py main <out.json> <status> <action_label> <action_token>
-    menu_builder.py status-list <out.json> <status.json>
+    menu_builder.py main <out.json> <status> <action_label> <action_token> [<status.json>]
+    menu_builder.py status-list <out.json> <status.json> <all|active>
     menu_builder.py status-detail <out.json> <status.json> <torrent_id>
+    menu_builder.py status-remove <out.json> <name>
 
 PyUI treats '/' in an option label as a sub-menu separator, so every label is
 sanitised by replacing '/' with '|'.
@@ -22,11 +23,18 @@ _STATUS_NAMES = {
     6: "seeding",
 }
 
+# State glyphs and sort groups (font: nunwen.ttf supports all of these).
+_GLYPH = {0: "■", 1: "○", 2: "↻", 3: "○", 4: "↓", 5: "○", 6: "↑"}
+_GROUP = {4: 0, 6: 1, 2: 2, 1: 3, 3: 3, 5: 3, 0: 4}
+_ACTIVE = (2, 4, 6)
+
 
 # ----------------------------------------------------------------- helpers
 
 def _sanitize(text):
-    return str(text).replace("/", "|")
+    # PyUI treats '/' in a label as a sub-menu separator, so replace it with a
+    # look-alike (U+2215 division slash) that renders the same but is harmless.
+    return str(text).replace("/", "\u2215")
 
 
 def _fmt_size(num):
@@ -41,7 +49,7 @@ def _fmt_size(num):
 
 
 def _fmt_rate(num):
-    return _fmt_size(num) + "/s"
+    return _fmt_size(num) + "\u2215s"
 
 
 def _fmt_eta(eta):
@@ -63,7 +71,6 @@ def _short(name, maxlen=34):
     if len(text) > maxlen:
         text = text[: maxlen - 1] + "…"
     return text
-    return text
 
 
 def _tracker_totals(torrent):
@@ -78,9 +85,15 @@ def _tracker_totals(torrent):
     return seeders, leechers
 
 
+def _is_active(torrent):
+    return torrent.get("status") in _ACTIVE
+
+
 def _write(path, menu):
+    # Safety net: no label may contain an ASCII '/', or PyUI would nest it.
+    clean = { key.replace("/", "\u2215"): value for key, value in menu.items() }
     with open(path, "w", encoding="utf-8") as handle:
-        json.dump(menu, handle, ensure_ascii=False)
+        json.dump(clean, handle, ensure_ascii=False)
 
 
 def _load(path):
@@ -90,19 +103,36 @@ def _load(path):
 
 # ---------------------------------------------------------------- builders
 
-def build_main(path, status, action_label, action_token):
-    status = _sanitize(status)
-    action_label = _sanitize(action_label)
-    menu = {
-        status: "ACTION_NONE",
-        action_label: action_token,
-        "Torrent status": "ACTION_STATUS",
-        "Log file location": "ACTION_LOG_PATH",
-    }
+def build_main(path, status_text, action_label, action_token, status_json_path=None):
+    active = 0
+    summary = None
+
+    if status_json_path:
+        try:
+            data = _load(status_json_path)
+        except (OSError, ValueError):
+            data = None
+        if data and not data.get("error"):
+            torrents = data.get("torrents") or []
+            stats = data.get("stats") or {}
+            active = sum(1 for t in torrents if _is_active(t))
+            summary = (
+                f"↓ {_fmt_rate(stats.get('downloadSpeed'))}   "
+                f"↑ {_fmt_rate(stats.get('uploadSpeed'))}   ·   {active} active"
+            )
+
+    menu = {}
+    if summary:
+        menu[summary] = "ACTION_NONE"
+    menu[_sanitize(status_text)] = "ACTION_NONE"
+    menu[_sanitize(action_label)] = action_token
+    menu["Torrent status" + (f" ({active} active)" if active else "")] = "ACTION_STATUS"
+    menu["Web UI (QR)"] = "ACTION_WEBUI"
+    menu["Log file location"] = "ACTION_LOG_PATH"
     _write(path, menu)
 
 
-def build_status_list(path, status):
+def build_status_list(path, status, only_active=False):
     torrents = status.get("torrents") or []
     stats = status.get("stats") or {}
     error = status.get("error") or ""
@@ -110,29 +140,38 @@ def build_status_list(path, status):
     menu = {}
     if error:
         menu["Status unavailable: " + _sanitize(error)] = "ACTION_NONE"
-    elif not torrents:
-        menu["No torrents"] = "ACTION_NONE"
     else:
-        active = sum(1 for t in torrents if t.get("status") not in (0,))
-        summary = (
+        active = sum(1 for t in torrents if _is_active(t))
+        shown = [t for t in torrents if (not only_active) or _is_active(t)]
+        shown.sort(key=lambda t: (_GROUP.get(t.get("status", 0), 9), (t.get("name") or "").lower()))
+
+        menu[
             f"↓ {_fmt_rate(stats.get('downloadSpeed'))}   "
-            f"↑ {_fmt_rate(stats.get('uploadSpeed'))}   "
-            f"·   {active} active of {len(torrents)}"
-        )
-        menu[summary] = "ACTION_NONE"
-        for index, torrent in enumerate(torrents):
+            f"↑ {_fmt_rate(stats.get('uploadSpeed'))}   ·   "
+            f"{active} active of {len(torrents)}"
+        ] = "ACTION_NONE"
+
+        if not shown:
+            menu["No active torrents" if only_active else "No torrents"] = "ACTION_NONE"
+
+        for index, torrent in enumerate(shown):
             state = torrent.get("status", 0)
             pct = torrent.get("percentDone", 0) * 100
-            label = f"{index + 1:02d}  {_short(torrent.get('name', '?'))}  ·  {pct:.1f}%"
+            label = f"{_GLYPH.get(state, '·')}  {index + 1:02d}  {_short(torrent.get('name', '?'))}  ·  {pct:.1f}%"
             if state == 4:
                 label += f"  ·  ↓{_fmt_rate(torrent.get('rateDownload'))}"
             elif state == 6:
                 label += f"  ·  ↑{_fmt_rate(torrent.get('rateUpload'))}"
+            elif state == 2:
+                label += "  ·  checking"
+            elif state == 0:
+                label += "  ·  stopped"
             else:
-                label += f"  ·  {_STATUS_NAMES.get(state, '?')}"
+                label += "  ·  queued"
             menu[label] = f"TORRENT:{torrent.get('id')}"
 
     menu["Refresh"] = "STATUS_REFRESH"
+    menu["Show all" if only_active else "Show active only"] = "STATUS_TOGGLE_FILTER"
     menu["Back to Menu"] = "STATUS_BACK"
     _write(path, menu)
 
@@ -149,8 +188,18 @@ def build_status_detail(path, status, torrent_id):
         menu["Torrent not found"] = "ACTION_NONE"
     else:
         seeders, leechers = _tracker_totals(torrent)
+        state = torrent.get("status", 0)
+
+        if state == 0:
+            menu["▶  Resume"] = "TORRENT_RESUME"
+        else:
+            menu["■  Pause"] = "TORRENT_PAUSE"
+        menu["↻  Verify"] = "TORRENT_VERIFY"
+        menu["⇅  Reannounce"] = "TORRENT_REANNOUNCE"
+        menu["✖  Remove"] = "TORRENT_REMOVE"
+
         menu[f"Name: {_short(torrent.get('name', '?'), 60)}"] = "ACTION_NONE"
-        menu[f"State: {_STATUS_NAMES.get(torrent.get('status', 0), '?')}"] = "ACTION_NONE"
+        menu[f"State: {_STATUS_NAMES.get(state, '?')}"] = "ACTION_NONE"
         menu[f"Progress: {torrent.get('percentDone', 0) * 100:.1f}%"] = "ACTION_NONE"
         menu[f"Size: {_fmt_size(torrent.get('totalSize'))}   Remaining: {_fmt_size(torrent.get('leftUntilDone'))}"] = "ACTION_NONE"
         menu[f"Down: {_fmt_rate(torrent.get('rateDownload'))}   Up: {_fmt_rate(torrent.get('rateUpload'))}"] = "ACTION_NONE"
@@ -167,17 +216,31 @@ def build_status_detail(path, status, torrent_id):
     _write(path, menu)
 
 
+def build_status_remove(path, name):
+    menu = {
+        f"Remove {_short(name, 40)}?": "ACTION_NONE",
+        "Remove and keep files": "REMOVE_KEEP",
+        "Remove and delete files": "REMOVE_DELETE",
+        "Cancel": "REMOVE_CANCEL",
+    }
+    _write(path, menu)
+
+
 def main():
     args = sys.argv[1:]
     if not args:
         sys.exit("usage: menu_builder.py <mode> ...")
     mode = args[0]
+
     if mode == "main":
-        build_main(args[1], args[2], args[3], args[4])
+        status_json = args[5] if len(args) > 5 else None
+        build_main(args[1], args[2], args[3], args[4], status_json)
     elif mode == "status-list":
-        build_status_list(args[1], _load(args[2]))
+        build_status_list(args[1], _load(args[2]), args[3] == "active")
     elif mode == "status-detail":
         build_status_detail(args[1], _load(args[2]), args[3])
+    elif mode == "status-remove":
+        build_status_remove(args[1], args[2] if len(args) > 2 else "this torrent")
     else:
         sys.exit("unknown mode: %s" % mode)
 

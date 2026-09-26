@@ -7,9 +7,10 @@ for the TrimUI Smart Pro S (and Smart Pro).
 
 The app menu offers:
 
-- **Start Transmission** — launches the bundled daemon.
-- **Stop Transmission** — stops it.
-- **Torrent status** — lists every torrent; select one for full details, **Refresh** to update.
+- **Start Transmission** / **Stop Transmission** — controls the bundled daemon.
+- **Torrent status** — lists every torrent (active first, with a **Show active only / Show all** toggle). Select one for full details and per-torrent actions:
+  - **Resume / Pause**, **Verify**, **Reannounce**, **Remove** (keep files, or delete files)
+- **Web UI (QR)** — shows a QR code for the web UI URL.
 - **Log file location** — shows the paths of the daemon log and the app log.
 
 The daemon is started in the background and **keeps running after you leave the

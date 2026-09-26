@@ -32,7 +32,7 @@ outside it is the download folder.
 
 - Static **aarch64** daemon built from the official release — zero runtime deps.
 - Includes the full Transmission **web UI**.
-- SpruceOS app menu: **Start**, **Stop**, **Torrent status**, **Log file location**.
+- SpruceOS app menu: **Start/Stop**, **Torrent status** (list, per-torrent actions, web-UI QR), **Log file location**.
 - The daemon keeps running after you leave the app; only **Stop** ends it.
 - Downloads land in the device's media folder (`/mnt/SDCARD/Roms/MEDIA`), so
   finished videos show up in your media player.

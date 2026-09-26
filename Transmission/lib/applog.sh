@@ -9,6 +9,14 @@ app_log() {
     log_message "$1" "" "$APP_LOG"
 }
 
+# Show a short confirmation/error message on screen and record it in the log.
+# MESSAGE cannot wait for a button, so it is shown for a fixed short time.
+app_toast() {
+    app_log "toast: $1"
+    log_and_display_message "$1"
+    sleep 1.5
+}
+
 # Rotate the app log once it grows past LOG_MAX_BYTES. Unlike the daemon log we
 # own this file, so it can be rotated at any time.
 rotate_app_log() {
