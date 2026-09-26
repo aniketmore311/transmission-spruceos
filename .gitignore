@@ -14,6 +14,8 @@ Transmission/web/
 Transmission/settings.json
 Transmission/transmission.log
 Transmission/transmission.log.1
+Transmission/transmission-app.log
+Transmission/transmission-app.log.1
 Transmission/transmission.pid
 Transmission/.menu.json
 Transmission/queue.json

@@ -9,13 +9,14 @@ The app menu offers:
 
 - **Start Transmission** — launches the bundled daemon.
 - **Stop Transmission** — stops it.
-- **Log file location** — shows the full path of the daemon log.
+- **Torrent status** — lists every torrent; select one for full details, **Refresh** to update.
+- **Log file location** — shows the paths of the daemon log and the app log.
 
 The daemon is started in the background and **keeps running after you leave the
 app**; it is only stopped with **Stop Transmission** (or on shutdown).
 
-The log is a plain file you can read over SSH; use **Log file location** to see
-its path. It is rolled over to `transmission.log.1` when it grows past ~1 MB.
+Both logs are plain files you can read over SSH; use **Log file location** to see
+their paths. Each is rolled over to `.1` when it grows past ~1 MB.
 
 ## Paths
 
@@ -26,6 +27,7 @@ Everything the app owns lives in this directory:
 | App / config dir | `/mnt/SDCARD/App/Transmission/` |
 | Settings | `/mnt/SDCARD/App/Transmission/settings.json` |
 | Log | `/mnt/SDCARD/App/Transmission/transmission.log` |
+| App log | `/mnt/SDCARD/App/Transmission/transmission-app.log` |
 | PID file | `/mnt/SDCARD/App/Transmission/transmission.pid` |
 | Web UI assets | `/mnt/SDCARD/App/Transmission/web/` |
 | Binary | `/mnt/SDCARD/App/Transmission/transmission-daemon` |
@@ -78,4 +80,7 @@ Use the web UI (the **+** button / magnet links) — there is no on-device
 
 - The app relies on the SpruceOS-provided `PyUI` and
   `spruce/scripts/helperFunctions.sh` for its UI, matching every other app.
-- The icon is currently a placeholder.
+- **Torrent status** reads the daemon's JSON-RPC on `127.0.0.1:9091` using the
+  credentials in `settings.json.default`. If you change the web-UI password,
+  update `settings.json.default` too, or the status screen will report an
+  authentication error (logged in `transmission-app.log`).

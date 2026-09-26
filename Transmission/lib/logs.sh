@@ -14,9 +14,9 @@ rotate_log() {
     fi
 }
 
-# Show where the log file lives. PyUI option-list labels cannot contain '/' (it
-# is the sub-menu separator), so the path is shown as a message instead.
+# Show where the log files live. PyUI option-list labels cannot contain '/' (it
+# is the sub-menu separator), so the paths are shown as a message instead.
 show_log_location() {
-    log_and_display_message "Log file: $LOG_FILE"
-    sleep 4
+    log_and_display_message "Transmission logs:\n$LOG_FILE\n$APP_LOG"
+    sleep 5
 }
